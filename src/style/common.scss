@@ -1,0 +1,15 @@
+.list-item-enter {
+  opacity: 0;
+}
+.list-item-enter-active,
+.list-item-enter-done {
+  opacity: 1;
+  transition: all 500ms;
+}
+.list-item-exit {
+  opacity: 1;
+}
+.list-item-exit-active {
+  opacity: 0;
+  transition: all 500ms;
+}

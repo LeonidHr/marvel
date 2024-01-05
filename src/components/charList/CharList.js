@@ -1,168 +1,117 @@
-import React, { Component } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { CSSTransition, TransitionGroup } from 'react-transition-group';
 
-import MarvelServices from '../../services/MarvelServices';
+import useMarvelServices from '../../services/MarvelServices';
 import Spinner from '../spinner/Spinner';
 import ErrorMessage from '../errorMessage/ErrorMessage';
 
 import './charList.scss';
+import '../../style/common.scss';
 
+const CharList = (props) => {
 
-class CharList extends Component {
+    const [charListArr, setCharListArr] = useState([]);
+    const [newItemsLoading, setNewItemsLoading] = useState(false);
+    const [offset, setOffset] = useState(210);
+    const [charEnded, setCharEnded] = useState(false);
 
-    state = {
-        charListArr: [],
-        loading: true,
-        error: false,
-        newItemsLoading: false,
-        offset: 210,
-        charEnded: false,
-        limit: 9,
+    const {loading, error, getAllCharacters} = useMarvelServices();
+
+    useEffect(() => {
+        onRequest(offset, true);
+    }, []);
+
+    const onRequest = (offset, initial) => {
+        initial ? setNewItemsLoading(false) : setNewItemsLoading(true);
+
+        getAllCharacters(offset)
+            .then(onCharsLoaded);
     }
 
-    marvelServices = new MarvelServices();
-
-    componentDidMount = () => {
-        const limit = this.onChangeLimit();
-        this.onRequest(this.state.offset, limit);
-    }
-
-    onRequest = (offset, limit) => {
-        this.onCharsLoading();
-        this.marvelServices
-            .getAllCharacters(offset, limit)
-            .then(this.onCharsLoaded)
-            .catch(this.onError);
-    }
-
-    onChangeLimit = () => {
-        let limit;
-        const {offset} = this.state;
-        const storageOffset = sessionStorage.getItem('offset');
-
-        if (!storageOffset) {
-            sessionStorage.setItem('offset', offset);
-        }
-
-        if (+storageOffset - offset >= 9) {
-            limit = (+storageOffset - offset) + 9;
-            this.setState({
-                offset: +storageOffset,
-            });
-        }
-
-        return limit;
-    }
-
-    onChangeOffset = () => {
-        const storageOffset = sessionStorage.getItem('offset');
-        if (storageOffset) {
-            sessionStorage.setItem('offset', +storageOffset + 9);
-        }
-    }
-
-    onCharsLoading = () => {
-        this.setState({newItemsLoading: true})
-    }
-
-    onCharsLoaded = (newCharListArr) => {
+    const onCharsLoaded = (newCharListArr) => {
         let ended = false;
 
         if (newCharListArr.length < 9) {
             ended = true;
         }
 
-        this.setState(({charListArr, offset}) => ({
-            charListArr: [...charListArr, ...newCharListArr],
-            loading: false,
-            newItemsLoading: false,
-            offset: +offset + 9,
-            charEnded: ended,
-        }))
+        setCharListArr(charListArr => [...charListArr, ...newCharListArr]);
+        setNewItemsLoading(false);
+        setOffset(offset => offset + 9);
+        setCharEnded(ended);
     }
 
-    onError = () => {
-        this.setState({
-            loading: false,
-            error: true,
-        })
+    const itemRefs = useRef([]);
+
+    const focusOnItem = (id) => {
+        itemRefs.current.forEach(item => item.classList.remove('char__item_selected'));
+        itemRefs.current[id].classList.add('char__item_selected');
+        itemRefs.current[id].focus();
     }
 
-    itemRefs = [];
-
-    setRefs = (ref) => {
-        this.itemRefs.push(ref);
-    }
-
-    focusOnItem = (id) => {
-        this.itemRefs.forEach(item => item.classList.remove('char__item_selected'));
-        this.itemRefs[id].classList.add('char__item_selected');
-        this.itemRefs[id].focus();
-    }
-
-    renderItems = (charListArr) => {
-        const charList = charListArr.map(({id, name, thumbnail}, i) => {
-            const imgNotFound = thumbnail == 'http://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available.jpg' ? true : null; 
+    const renderItems = (charListArr) => {
+        const charList = charListArr.map((item, i) => {
+            const imgNotFound = item.thumbnail == 'http://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available.jpg' ? true : null; 
             const imgClazz = imgNotFound ? 'char__img char__img_fill' : 'char__img';
 
             return (
-                <li 
-                    ref={this.setRefs}
-                    tabIndex={0}
-                    key={id} 
-                    className="char__item"
-                    onClick={() => {
-                        this.props.onSelectedChar(id);
-                        this.focusOnItem(i);
-                    }}
-                    onFocus={() => this.focusOnItem(i)}
-                    onKeyDown={e => {
-                        if (e.key == ' ' || e.key == 'Enter') {
-                            this.props.onSelectedChar(id);
-                            this.focusOnItem(i);
-                        }
-                    }}>
-                        <img className={imgClazz} src={thumbnail} alt={name} />
-                        <div className="char__name">{name}</div>
-                </li>
+                <CSSTransition key={item.id}  timeout={500} classNames="list-item">
+                    <li 
+                        ref={el => itemRefs.current[i] = el}
+                        tabIndex={0}
+                        key={item.id} 
+                        className="char__item"
+                        onClick={() => {
+                            props.onSelectedChar(item.id);
+                            focusOnItem(i);
+                        }}
+                        onFocus={() => focusOnItem(i)}
+                        onKeyDown={e => {
+                            if (e.key == ' ' || e.key == 'Enter') {
+                                props.onSelectedChar(item.id);
+                                focusOnItem(i);
+                            }
+                        }}>
+                            <img className={imgClazz} src={item.thumbnail} alt={item.name} />
+                            <div className="char__name">{item.name}</div>
+                    </li>
+                </CSSTransition>
             );
         });
 
         return (
-            <ul className="char__grid">
+            <TransitionGroup className="char__grid">
                 {charList}
-            </ul>
+            </TransitionGroup>
         );
     }
 
-    render() {
-        const {charListArr, loading, error, newItemsLoading, offset, charEnded} = this.state;
+    const spinner = loading && !newItemsLoading ? <Spinner/> : null;
+    const errorMessage = error ? <ErrorMessage/> : null;
+    const content = renderItems(charListArr);
 
-        const spinner = loading ? <Spinner/> : null;
-        const errorMessage = error ? <ErrorMessage/> : null;
-        const content = !(loading || error) ? this.renderItems(charListArr) : null;
-
-        return (
-            <div className="char__list">
-                {spinner}
-                {errorMessage}
-                {content}
-                
-                <button 
-                    style={{'display': charEnded ? 'none' : 'block'}}
-                    className="button button__main button__long"
-                    disabled={newItemsLoading}
-                    onClick={() => {this.onRequest(offset); this.onChangeOffset();}} >
-                        <div className="inner">load more</div>
-                </button>
-            </div>
-        )
-    }
+    return (
+        <div className="char__list">
+            {spinner}
+            {errorMessage}
+            {content}
+            
+            <button 
+                style={{'display': charEnded ? 'none' : 'block'}}
+                className="button button__main button__long"
+                disabled={newItemsLoading}
+                onClick={() => {
+                    onRequest(offset);
+                }} >
+                    <div className="inner">load more</div>
+            </button>
+        </div>
+    )
 }
 
 CharList.propTypes = {
     onSelectedChar: PropTypes.func,
 }
 
-// char__item_selected
 export default CharList;
